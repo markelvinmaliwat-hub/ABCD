@@ -36,3 +36,10 @@ IMPORTANT
   * If the dashboard still shows "could not reach ...", the message now ends with the reason in brackets
     (e.g. 'sheet is not shared', 'Payment_Log tab not found', 'web app: Failed to fetch'). Send me that text.
   * Accounts made earlier in an agent's own browser are copied to the server the first time that agent logs in again.
+
+TROUBLESHOOTING  ->  open diagnose.html (from the same place you open the dashboard) and click "Run checks".
+  * "sheet ... Payment_Log not found" is no longer an error: the tab is created on the first saved payment.
+  * "web app: Failed to fetch" means the browser cannot reach your Apps Script web app. Redeploy:
+    Deploy > Manage deployments > pencil > Version: New version > Execute as: Me > Who has access: ANYONE.
+    ("Anyone with Google account" or "Only myself" will always fail from the dashboard.)
+  * Until the web app is reachable, new activity/payments wait in the browser and the log screens say how many are waiting.

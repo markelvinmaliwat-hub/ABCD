@@ -271,7 +271,7 @@ function showPayLog(){let ALL=[],HIST=[],MODE='latest',VIEW=[];
   HIST=hist.slice().sort((x,y)=>String(y.at).localeCompare(String(x.at)));
   ALL=Object.entries(payRec()).map(([k,v])=>Object.assign({key:k},v)).sort((x,y)=>String(y.at).localeCompare(String(x.at)));
   const ag=new Set(ALL.map(x=>x.g).filter(Boolean)),sv2=new Set(ALL.map(x=>x.by).filter(Boolean));
-  $('pls').textContent=`${ALL.length} subscriber${ALL.length===1?'':'s'} with remarks \u00b7 ${HIST.length} update${HIST.length===1?'':'s'} \u00b7 ${sv2.size} agent${sv2.size===1?'':'s'} saved remarks`+(rem?' \u00b7 shared database \u2014 visible to all agents':(LOG_URL||SHEET_ID?' \u00b7 could not reach the shared database'+(RERR?' ('+RERR+')':'')+', showing this browser only':' \u00b7 this browser only (add your Google Sheet link to share with all agents)'));draw()};
+  $('pls').textContent=`${ALL.length} subscriber${ALL.length===1?'':'s'} with remarks \u00b7 ${HIST.length} update${HIST.length===1?'':'s'} \u00b7 ${sv2.size} agent${sv2.size===1?'':'s'} saved remarks`+(rem?' \u00b7 shared database \u2014 visible to all agents':(LOG_URL||SHEET_ID?' \u00b7 could not reach the shared database'+(RERR?' ('+RERR+')':'')+', showing this browser only':' \u00b7 this browser only (add your Google Sheet link to share with all agents)'))+qNote();draw()};
  window.__plRefresh=()=>{if($('plb'))load()};$('plq').oninput=draw;$('plm').onchange=e=>{MODE=e.target.value;draw()};$('plr').onclick=load;$('pld').onclick=()=>{if(MODE==='all')histCsv(HIST);else payCsv()};load()}
 function histCsv(rows){const H=['Saved at','Subscriber','Account','Agent','Action','Date of payment','Remarks','Saved by (name)','Saved by (email)','Agent code'],q=v=>'"'+String(v==null?'':v).replace(/"/g,'""')+'"',lab=o=>(PAYOPT.find(z=>z[0]===o)||['',o||''])[1];
  const data=[H.map(q).join(',')].concat(rows.map(x=>[x.at,x.n,x.a,x.g,lab(x.o),x.d,x.m,x.bn,x.by,x.code].map(q).join(','))).join('\r\n');
@@ -382,7 +382,8 @@ async function remoteRows(kind){
   const t=await r.text();
   if(/^\s*<(!doctype|html)/i.test(t))throw new Error('the Sheet is not shared as "Anyone with the link"');
   const A=parseCsv(t),h0=String((A[0]||[])[0]||'').trim().toLowerCase();
-  if(h0!==(kind==='act'?'time':'saved at'))throw new Error(kind==='act'?'first tab (gid=0) is missing the Activity headers - run setup in Apps Script':'tab "Payment_Log" not found - run setup in Apps Script');
+  if(kind==='act'){if(h0!=='time'){if(!h0&&A.length<2)return [];throw new Error('first tab (gid=0) must start with the Activity headers (Time, Email, ...) - run setup in Apps Script')}}
+  else if(h0!=='saved at'){if(h0==='time'||(!h0&&A.length<2))return [];throw new Error('tab "Payment_Log" has unexpected headers')}
   const R=A.slice(1).filter(x=>x.some(c=>String(c).trim()!==''));
   if(kind==='act')return R.slice(-5000).map(x=>({time:x[0]||'',email:x[1]||'',code:x[2]||'',name:x[3]||'',action:x[4]||'',where:x[5]||'',search:x[6]||'',device:x[7]||'',visitor:x[8]||''}));
   const H=R.map(x=>({at:x[0]||'',key:x[1]||'',name:x[2]||'',account:x[3]||'',agent:x[4]||'',action:x[5]||'',label:x[6]||'',date:x[7]||'',remarks:x[8]||'',by:x[9]||'',code:x[10]||'',byName:x[11]||''})).filter(x=>x.key);
@@ -392,17 +393,19 @@ async function remoteRows(kind){
  if(LOG_URL){try{
   const r=await fetchT(LOG_URL+(LOG_URL.includes('?')?'&':'?')+'action=read&kind='+(kind==='act'?'activity':kind));
   const j=await r.json(),d=j&&(Array.isArray(j.data)?j.data:j.rows);if(Array.isArray(d))return d;throw new Error((j&&j.error)||'unexpected reply')
- }catch(e){errs.push('web app: '+(e&&e.name==='AbortError'?'timed out':(e&&e.message)||e))}}
+ }catch(e){errs.push('web app: '+(e&&e.name==='AbortError'?'timed out':(e&&e.message)||e)+(/failed to fetch|load failed|networkerror/i.test(String(e&&e.message))?' - redeploy it as Web app with Who has access: Anyone':''))}}
  RERR=errs.join(' | ');throw new Error(RERR)}
 
 const ld=(k,d)=>{try{return JSON.parse(localStorage.getItem(k))||d}catch(e){return d}},sv=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}};
 /* ---- Google Sheet API (CORS-safe GET): ?action=read / ?action=write&data=... ---- */
 async function getPayments(){const res=await fetch(`${WEB_APP_URL}?action=read`);const json=await res.json();return json.data}
+async function saveToPaymentLog(data){return logPayment(data)}
 async function logPayment(paymentData){const url=`${WEB_APP_URL}?action=write&data=${encodeURIComponent(JSON.stringify(paymentData))}`;const res=await fetch(url);const json=await res.json();if(!json.success)throw new Error(json.error);return json}
 async function sheetWrite(obj){if(!LOG_URL)return false;try{const r=await fetchT(`${WEB_APP_URL}?action=write&data=${encodeURIComponent(JSON.stringify(obj))}`,15000);const j=await r.json();return !!(j&&j.success)}catch(e){return false}}
 let _fl=false;
 async function flushQ(){if(_fl)return;_fl=true;try{let q=ld('mm_wq',[]);while(q.length){if(!(await sheetWrite(q[0])))break;q.shift();sv('mm_wq',q)}}finally{_fl=false}}
 function sheetSend(obj){sheetWrite(obj).then(ok=>{if(ok)flushQ();else{const q=ld('mm_wq',[]);q.push(obj);sv('mm_wq',q.slice(-300))}})}
+const qNote=()=>{const n=ld('mm_wq',[]).length;return n?' \u00b7 '+n+' update'+(n>1?'s':'')+' waiting to be sent to the Sheet (web app not reachable)':''};
 const VID=()=>{let v=ld('mm_vid','');if(!v){v='V'+Math.random().toString(36).slice(2,10);sv('mm_vid',v)}return v};
 function logEv(action,where,search,em){if(!ME&&!em&&action!=='OPEN PORTAL')return;const d=new Date(),p=n=>String(n).padStart(2,'0'),row={time:`${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`,email:ME?ME.email:(em||''),code:ME?ME.code:'',name:ME?ME.name:'',action,where,search:search||'',device:(navigator.userAgent||'').slice(0,120),visitor:VID()};
  const L=ld('mm_log',[]);L.push(row);sv('mm_log',L.slice(-5000));
@@ -517,7 +520,7 @@ function showLog(){
   $('lgb').innerHTML=VIEW.slice(0,500).map(r=>`<tr><td>${esc(r.time||'')}</td><td class="bl">${esc(r.email||'\u2014')}</td><td>${esc(r.code||'\u2014')}</td><td title="${esc(r.where||'')}">${esc(r.action||'')}</td><td>${esc(r.search||'\u2014')}</td></tr>`).join('')||'<tr><td colspan="5" class="empty">No activity yet</td></tr>'};
  const load=async()=>{$('lgs').textContent='Loading...';const L=await loadLog();let rows=L.rows.slice().sort((a,b)=>String(b.time).localeCompare(String(a.time)));if(!admin)rows=rows.filter(r=>String(r.email||'').toLowerCase()===me);ALL=rows;
   const em=new Set(rows.map(r=>String(r.email||'').toLowerCase()).filter(Boolean));
-  $('lgs').textContent=`${em.size} email${em.size===1?'':'s'} \u00b7 ${rows.length.toLocaleString()} activities`+(rows.length>500?' \u00b7 showing latest 500':'')+(admin?'':' \u00b7 your activity only')+(L.remote?' \u00b7 all devices':((LOG_URL||SHEET_ID)&&L.fail?' \u00b7 could not reach the Google Sheet ('+RERR+'), showing this browser only':' \u00b7 this browser only (add your Google Sheet link to see everyone)'));draw()};
+  $('lgs').textContent=`${em.size} email${em.size===1?'':'s'} \u00b7 ${rows.length.toLocaleString()} activities`+(rows.length>500?' \u00b7 showing latest 500':'')+(admin?'':' \u00b7 your activity only')+(L.remote?' \u00b7 all devices':((LOG_URL||SHEET_ID)&&L.fail?' \u00b7 could not reach the Google Sheet ('+RERR+'), showing this browser only':' \u00b7 this browser only (add your Google Sheet link to see everyone)'))+qNote();draw()};
  $('lgq').oninput=draw;$('lgr').onclick=load;$('lgd').onclick=()=>dlCsv(VIEW);load()}
 $('dlog').onclick=showLog;
 try{const c=sessionStorage.getItem('agc'),e=sessionStorage.getItem('age')||'',acc=ld('mm_acc',{})[e];if(c&&AC[c]!==undefined&&acc)enter(c,true,e)}catch(e){}
