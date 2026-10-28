@@ -287,7 +287,7 @@ function showPayList(t,rows){const REC=payRec(),sh=rows.slice(0,200);
   if(!o)return bad('Choose an action to save.');if(o==='sched'&&!d.value)return bad('Set the date of payment to save.');
   const R2=payRec(),now=new Date(),p2=n=>String(n).padStart(2,'0'),at=`${now.getFullYear()}-${p2(now.getMonth()+1)}-${p2(now.getDate())} ${p2(now.getHours())}:${p2(now.getMinutes())}:${p2(now.getSeconds())}`,lab=PAYOPT.find(z=>z[0]===o)[1],key=PK(r),dt=o==='sched'?d.value:'';
   const rec={o,d:dt,m:mm,at,by:(ME&&ME.email)||'',code:(ME&&ME.code)||'',bn:(ME&&ME.name)||'',n:dv(r,'SUBSCRIBER NAME'),a:dv(r,'ACCOUNT PID'),g:r._a||''};R2[key]=rec;paySave(R2);{const H=payH();H.push(Object.assign({key},rec));try{localStorage.setItem('mm_payh',JSON.stringify(H.slice(-2000)))}catch(er){}}
-  if(LOG_URL){try{fetch(LOG_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain'},body:JSON.stringify({type:'pay',key,name:rec.n,account:rec.a,agent:rec.g,label:lab,action:o,date:dt,remarks:mm,by:rec.by,code:rec.code,byName:rec.bn,at})}).catch(()=>{})}catch(er){}}
+  if(LOG_URL)sheetSend({type:'pay',key,name:rec.n,account:rec.a,agent:rec.g,label:lab,action:o,date:dt,remarks:mm,by:rec.by,code:rec.code,byName:rec.bn,at});
   dbSave(key,rec,nt);
   logEv('PAYMENT UPDATE','For payment',`${rec.n} \u00b7 ${rec.a||'no account'} \u00b7 ${lab}${dt?' \u00b7 pay on '+dt:''}${mm?' \u00b7 '+mm:''}`);
   nt.innerHTML='<span class="pok">Saved '+at+(rec.bn?' \u00b7 '+esc(rec.bn):'')+'</span>'};
@@ -369,7 +369,7 @@ const PW='3mdaupland',nc=v=>String(v||'').trim().toUpperCase().replace(/^P/,'');
 const AC={};['PLDT','RED'].forEach(t=>(DATA[t]||[]).forEach(r=>{const c=nc(r['AGENT CODE']);if(c&&!AC[c])AC[c]=r['AGENT NAME']}));
 let ME=null,pendFc=false,suMode=false,lstep=0,pendC='',pendE='';const pwh=x=>{let a=3735928559,b=1103547991;for(let i=0;i<x.length;i++){const c=x.charCodeAt(i);a=Math.imul(a^c,2654435761);b=Math.imul(b^c,1597334677)}a=Math.imul(a^(a>>>16),2246822507)^Math.imul(b^(b>>>13),3266489909);b=Math.imul(b^(b>>>16),2246822507)^Math.imul(a^(a>>>13),3266489909);return (4294967296*(2097151&b)+(a>>>0)).toString(36)};
 const ADMIN_EMAILS=[];/* OPTIONAL: emails allowed to see EVERYONE'S activity, e.g. ['you@email.com']. Leave empty = every logged-in agent sees the full list. */
-const LOG_URL='https://script.google.com/macros/s/AKfycbwNG8pirHbssES5uzrx3y_W_Ko7P1EUsAlBxrckFHFd4vTET4Z6z8EVmkRpEEgJ25N1vQ/exec';/* Google Apps Script web app (writes to your Google Sheet) */
+const WEB_APP_URL='https://script.google.com/macros/s/AKfycbwNG8pirHbssES5uzrx3y_W_Ko7P1EUsAlBxrckFHFd4vTET4Z6z8EVmkRpEEgJ25N1vQ/exec';const LOG_URL=WEB_APP_URL;/* Google Apps Script web app (writes to your Google Sheet) */
 const SHEET_ID='11-VVgEX5ugFP4suckiaV_LitXz2VhuYe3HhDv4rLcdA';/* Google Sheet used to READ the shared logs (tab gid=0 = activity, tab "Payment_Log" = payments). Must be shared: Anyone with the link = Viewer */
 const SHEET_BASE='https://docs.google.com/spreadsheets/d/'+SHEET_ID+'/gviz/tq?tqx=out:csv&headers=1';let RERR='';
 function parseCsv(t){const R=[];let row=[],f='',q=false;for(let i=0;i<t.length;i++){const c=t[i];if(q){if(c==='"'){if(t[i+1]==='"'){f+='"';i++}else q=false}else f+=c}else if(c==='"')q=true;else if(c===','){row.push(f);f=''}else if(c==='\n'||c==='\r'){if(c==='\r'&&t[i+1]==='\n')i++;row.push(f);R.push(row);row=[];f=''}else f+=c}if(f!==''||row.length){row.push(f);R.push(row)}return R}
@@ -390,16 +390,23 @@ async function remoteRows(kind){
   const L={};H.forEach(x=>{if(!L[x.key]||x.at>=L[x.key].at)L[x.key]=x});return Object.values(L)
  }catch(e){errs.push('sheet: '+(e&&e.name==='AbortError'?'timed out':(e&&e.message)||e))}}
  if(LOG_URL){try{
-  const r=await fetchT(LOG_URL+(LOG_URL.includes('?')?'&':'?')+'read='+(kind==='act'?'1':kind));
-  const j=await r.json();if(j&&Array.isArray(j.rows))return j.rows;throw new Error((j&&j.error)||'unexpected reply')
+  const r=await fetchT(LOG_URL+(LOG_URL.includes('?')?'&':'?')+'action=read&kind='+(kind==='act'?'activity':kind));
+  const j=await r.json(),d=j&&(Array.isArray(j.data)?j.data:j.rows);if(Array.isArray(d))return d;throw new Error((j&&j.error)||'unexpected reply')
  }catch(e){errs.push('web app: '+(e&&e.name==='AbortError'?'timed out':(e&&e.message)||e))}}
  RERR=errs.join(' | ');throw new Error(RERR)}
 
 const ld=(k,d)=>{try{return JSON.parse(localStorage.getItem(k))||d}catch(e){return d}},sv=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}};
+/* ---- Google Sheet API (CORS-safe GET): ?action=read / ?action=write&data=... ---- */
+async function getPayments(){const res=await fetch(`${WEB_APP_URL}?action=read`);const json=await res.json();return json.data}
+async function logPayment(paymentData){const url=`${WEB_APP_URL}?action=write&data=${encodeURIComponent(JSON.stringify(paymentData))}`;const res=await fetch(url);const json=await res.json();if(!json.success)throw new Error(json.error);return json}
+async function sheetWrite(obj){if(!LOG_URL)return false;try{const r=await fetchT(`${WEB_APP_URL}?action=write&data=${encodeURIComponent(JSON.stringify(obj))}`,15000);const j=await r.json();return !!(j&&j.success)}catch(e){return false}}
+let _fl=false;
+async function flushQ(){if(_fl)return;_fl=true;try{let q=ld('mm_wq',[]);while(q.length){if(!(await sheetWrite(q[0])))break;q.shift();sv('mm_wq',q)}}finally{_fl=false}}
+function sheetSend(obj){sheetWrite(obj).then(ok=>{if(ok)flushQ();else{const q=ld('mm_wq',[]);q.push(obj);sv('mm_wq',q.slice(-300))}})}
 const VID=()=>{let v=ld('mm_vid','');if(!v){v='V'+Math.random().toString(36).slice(2,10);sv('mm_vid',v)}return v};
 function logEv(action,where,search,em){if(!ME&&!em&&action!=='OPEN PORTAL')return;const d=new Date(),p=n=>String(n).padStart(2,'0'),row={time:`${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`,email:ME?ME.email:(em||''),code:ME?ME.code:'',name:ME?ME.name:'',action,where,search:search||'',device:(navigator.userAgent||'').slice(0,120),visitor:VID()};
  const L=ld('mm_log',[]);L.push(row);sv('mm_log',L.slice(-5000));
- if(LOG_URL){try{fetch(LOG_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain'},body:JSON.stringify(row)}).catch(()=>{})}catch(e){}}}
+ if(LOG_URL)sheetSend(row)}
 function enter(c,quiet,em){setSu(false);$('lp').value='';$('lp2').value='';ME={code:c,email:em||'',name:AC[c]||''};document.body.classList.remove('lo','fcv');mode('in');$('t1').textContent='DASHBOARD';$('who').textContent='Agent '+c+(AC[c]?' \u00b7 '+AC[c]:'')+(ME.email?' \u00b7 '+ME.email:'');try{sessionStorage.setItem('agc',c);sessionStorage.setItem('age',ME.email)}catch(e){}if(!quiet)logEv('LOG IN','Login');if(pendFc){pendFc=false;document.body.classList.add('fcv');mode('fc')}}
 function setSu(on){suMode=on;lstep=0;pendC='';pendE='';$('sue').hidden=false;$('lul').textContent='Agent code (without the P)';$('lu').value='';$('lul').hidden=$('lu').hidden=true;$('lpl').hidden=$('lp').hidden=false;$('lpl').textContent=on?'Create your password (at least 6 characters)':'Password';$('lp').autocomplete=on?'new-password':'current-password';$('lp').value='';$('lp2').value='';$('lpl2').hidden=$('lp2').hidden=!on;$('lgo').textContent=on?'Sign up':'Log in';$('swi').classList.toggle('on',!on);$('swu').classList.toggle('on',on);$('lerr').textContent=''}
 function agStep(em,msg){lstep=1;pendE=em;$('sue').hidden=true;$('lpl').hidden=$('lp').hidden=true;$('lpl2').hidden=$('lp2').hidden=true;$('lul').textContent=msg||'Enter your agent code to proceed';$('lul').hidden=$('lu').hidden=false;$('lu').value='';$('lgo').textContent='Proceed';$('lerr').textContent='';$('lu').focus()}
@@ -514,7 +521,7 @@ function showLog(){
  $('lgq').oninput=draw;$('lgr').onclick=load;$('lgd').onclick=()=>dlCsv(VIEW);load()}
 $('dlog').onclick=showLog;
 try{const c=sessionStorage.getItem('agc'),e=sessionStorage.getItem('age')||'',acc=ld('mm_acc',{})[e];if(c&&AC[c]!==undefined&&acc)enter(c,true,e)}catch(e){}
-logEv('OPEN PORTAL','Portal','');
+logEv('OPEN PORTAL','Portal','');flushQ();
 dbInit();syncPay();$('fpd').onclick=payCsv;$('im').onchange=e=>{IM=e.target.value;renderINS()};$('fm').onchange=e=>{FM=e.target.value;renderFP()};$('dpay').onclick=showPayLog;
 </script><button id="vsw" type="button"></button>
 <script>

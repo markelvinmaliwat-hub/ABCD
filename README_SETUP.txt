@@ -5,8 +5,10 @@ How it works now
   READ  : the dashboard reads the logs straight from your Sheet's CSV link
           https://docs.google.com/spreadsheets/d/11-VVgEX5ugFP4suckiaV_LitXz2VhuYe3HhDv4rLcdA/gviz/tq?tqx=out:csv&gid=0
           (first tab = activity, tab "Payment_Log" = payments). If that is unreachable it tries the web app.
-  WRITE : the dashboard sends each activity / payment to your Apps Script web app, which appends it to the Sheet.
-          (A browser cannot write to a Sheet by itself - the web app is required for writing.)
+  WRITE : the dashboard sends each activity / payment to your Apps Script web app with a plain GET request
+          (CORS-safe, no POST):  <web app>?action=write&data=<json>
+          READ via the web app:  <web app>?action=read   (kind=pay | payhist | activity)
+          If a write fails (offline / not deployed) it is kept in the browser and re-sent automatically later.
 
 STEP 1 - Share the Sheet (this is the usual cause of "could not reach the shared database")
   Sheet > Share > General access > "Anyone with the link" > Viewer.
